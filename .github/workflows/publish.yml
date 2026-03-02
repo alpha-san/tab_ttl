@@ -1,0 +1,66 @@
+name: Publish to Chrome Web Store
+
+# Triggers on version tags, e.g. v1.0.0, v1.2.3
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Required GitHub repository secrets:
+#   CHROME_EXTENSION_ID   — CWS extension ID (from dashboard after first manual upload)
+#   CHROME_CLIENT_ID      — Google Cloud OAuth 2.0 client ID
+#   CHROME_CLIENT_SECRET  — Google Cloud OAuth 2.0 client secret
+#   CHROME_REFRESH_TOKEN  — Obtained from one-time OAuth flow (see setup guide below)
+#
+# One-time setup steps:
+#   1. Pay $5 and register at https://chrome.google.com/webstore/devconsole
+#   2. Upload the extension zip manually to create the CWS listing; note the Extension ID
+#   3. Create a Google Cloud project at https://console.cloud.google.com
+#   4. Enable "Chrome Web Store API" in the project
+#   5. Create OAuth 2.0 credentials (Desktop app type); note Client ID and Client Secret
+#   6. Run the one-time auth flow to obtain a refresh token:
+#        npx chrome-webstore-upload-cli auth --client-id CLIENT_ID --client-secret CLIENT_SECRET
+#   7. Add all four values as GitHub repository secrets (Settings → Secrets → Actions)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate tag version matches manifest
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "ERROR: Tag version ($TAG_VERSION) does not match manifest.json version ($MANIFEST_VERSION)"
+            exit 1
+          fi
+          echo "Version OK: $TAG_VERSION"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload to Chrome Web Store
+        run: |
+          npx chrome-webstore-upload-cli upload \
+            --source dist/tab-ttl.zip \
+            --extension-id "${{ secrets.CHROME_EXTENSION_ID }}" \
+            --client-id "${{ secrets.CHROME_CLIENT_ID }}" \
+            --client-secret "${{ secrets.CHROME_CLIENT_SECRET }}" \
+            --refresh-token "${{ secrets.CHROME_REFRESH_TOKEN }}" \
+            --auto-publish

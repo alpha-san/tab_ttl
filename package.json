@@ -1,0 +1,13 @@
+{
+  "name": "tab-ttl",
+  "version": "1.0.0",
+  "description": "Chrome extension for tab lifecycle management",
+  "private": true,
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "lint": "node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json OK')\" && find background popup options utils -name '*.js' | xargs node --check && echo 'JS syntax OK'"
+  },
+  "devDependencies": {
+    "chrome-webstore-upload-cli": "^3.0.0"
+  }
+}

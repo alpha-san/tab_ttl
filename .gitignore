@@ -1,0 +1,10 @@
+# Build artifacts
+dist/
+*.zip
+
+# Dependencies
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db

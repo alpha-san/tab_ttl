@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!--
+  Open this file in a browser to generate PNG icons from the SVG source.
+  Click each button to download the PNG at the required size.
+  Place the downloaded files in this icons/ directory.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Generate TabTTL Icons</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; background: #f5f5f5; }
+    h1 { margin-bottom: 16px; }
+    .grid { display: flex; gap: 24px; flex-wrap: wrap; }
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    canvas { border: 1px solid #ddd; border-radius: 6px; }
+    button {
+      background: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background: #3a7aee; }
+  </style>
+</head>
+<body>
+  <h1>TabTTL Icon Generator</h1>
+  <p>Click each button to download the PNG. Save them in the <code>icons/</code> folder.</p>
+  <br/>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    const SIZES = [16, 48, 128];
+
+    // SVG embedded directly to avoid file:// fetch restrictions.
+    const SVG_TEXT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="22" fill="#4285f4"/>
+  <rect x="16" y="18" width="36" height="14" rx="7" fill="white" opacity="0.9"/>
+  <rect x="56" y="22" width="20" height="10" rx="5" fill="white" opacity="0.4"/>
+  <rect x="80" y="22" width="16" height="10" rx="5" fill="white" opacity="0.3"/>
+  <circle cx="64" cy="80" r="34" fill="white"/>
+  <circle cx="64" cy="80" r="28" fill="#4285f4"/>
+  <rect x="62.5" y="54" width="3" height="6" rx="1.5" fill="white" opacity="0.6"/>
+  <rect x="84" y="78.5" width="6" height="3" rx="1.5" fill="white" opacity="0.6"/>
+  <rect x="62.5" y="96" width="3" height="6" rx="1.5" fill="white" opacity="0.6"/>
+  <rect x="38" y="78.5" width="6" height="3" rx="1.5" fill="white" opacity="0.6"/>
+  <line x1="64" y1="80" x2="52" y2="66" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <line x1="64" y1="80" x2="78" y2="68" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="64" cy="80" r="3" fill="white"/>
+</svg>`;
+
+    function getSvgUrl() {
+      const blob = new Blob([SVG_TEXT], { type: 'image/svg+xml' });
+      return URL.createObjectURL(blob);
+    }
+
+    async function init() {
+      const svgUrl = getSvgUrl();
+      const grid = document.getElementById('grid');
+
+      for (const size of SIZES) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const label = document.createElement('strong');
+        label.textContent = `${size}×${size}`;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        canvas.style.width = Math.max(size, 64) + 'px';
+        canvas.style.height = Math.max(size, 64) + 'px';
+        canvas.style.imageRendering = 'pixelated';
+
+        const ctx = canvas.getContext('2d');
+        const img = new Image(size, size);
+        img.onload = () => {
+          ctx.clearRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+        };
+        img.src = svgUrl;
+
+        const btn = document.createElement('button');
+        btn.textContent = `Download icon${size}.png`;
+        btn.onclick = () => {
+          const link = document.createElement('a');
+          link.download = `icon${size}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        };
+
+        card.append(label, canvas, btn);
+        grid.appendChild(card);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TabTTL Settings</title>
+  <link rel="stylesheet" href="options.css" />
+  <link rel="stylesheet" href="analytics-section.css" />
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- Sidebar nav -->
+    <nav class="sidebar">
+      <div class="sidebar-logo">Tab<span>TTL</span></div>
+      <ul class="nav-list">
+        <li><button class="nav-btn active" data-section="general">General</button></li>
+        <li><button class="nav-btn" data-section="domains">Domains</button></li>
+        <li><button class="nav-btn" data-section="advanced">Advanced</button></li>
+        <li><button class="nav-btn" data-section="history">History</button></li>
+        <li><button class="nav-btn" data-section="analytics">Analytics</button></li>
+      </ul>
+    </nav>
+
+    <!-- Main content -->
+    <main class="content">
+
+      <!-- ── General ──────────────────────────────────────────────────────── -->
+      <section id="section-general" class="section active">
+        <h2 class="section-title">General</h2>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label">Extension enabled</label>
+            <label class="toggle">
+              <input type="checkbox" id="enabled" />
+              <span class="toggle-track"></span>
+              <span class="toggle-thumb"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label" for="ttl">Global TTL</label>
+            <p class="field-desc">Time before an inactive tab is auto-closed. Resets each time you visit the tab.</p>
+            <div class="ttl-input-row">
+              <input class="input" type="number" id="ttlValue" min="1" max="9999" step="1" value="5" />
+              <select class="select" id="ttlUnit">
+                <option value="s">Seconds</option>
+                <option value="m" selected>Minutes</option>
+                <option value="h">Hours</option>
+              </select>
+            </div>
+            <div class="ttl-presets">
+              <button class="preset-btn" data-ttl="60000">1 min</button>
+              <button class="preset-btn" data-ttl="300000">5 min</button>
+              <button class="preset-btn" data-ttl="900000">15 min</button>
+              <button class="preset-btn" data-ttl="1800000">30 min</button>
+              <button class="preset-btn" data-ttl="3600000">1 hr</button>
+              <button class="preset-btn" data-ttl="7200000">2 hr</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label">Mode</label>
+            <p class="field-desc">Choose which tabs are subject to auto-closing.</p>
+            <div class="mode-toggle-group">
+              <label class="mode-option">
+                <input type="radio" name="mode" value="blocklist" id="modeBlocklist" />
+                <span class="mode-label">
+                  <strong>Blocklist</strong>
+                  <span>Auto-close only tabs from listed domains</span>
+                </span>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="mode" value="allowlist" id="modeAllowlist" />
+                <span class="mode-label">
+                  <strong>Allowlist</strong>
+                  <span>Auto-close all tabs <em>except</em> listed domains</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label" for="gracePeriod">Grace period</label>
+            <p class="field-desc">Seconds to show a "Keep Open" notification before actually closing the tab.</p>
+            <div class="input-suffix-row">
+              <input class="input input-sm" type="number" id="gracePeriod" min="5" max="120" step="1" />
+              <span class="input-suffix">seconds</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label" for="snoozeMinutes">Snooze duration</label>
+            <p class="field-desc">How long a tab's TTL is extended when you snooze it from the popup.</p>
+            <div class="input-suffix-row">
+              <input class="input input-sm" type="number" id="snoozeMinutes" min="1" max="480" step="1" />
+              <span class="input-suffix">minutes</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label" for="streakTabLimit">Streak tab limit</label>
+            <p class="field-desc">Daily streak increments when your total open tab count stays at or below this number. Exceeding it resets the streak.</p>
+            <div class="input-suffix-row">
+              <input class="input input-sm" type="number" id="streakTabLimit" min="1" max="500" step="1" />
+              <span class="input-suffix">tabs</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ── Domains ──────────────────────────────────────────────────────── -->
+      <section id="section-domains" class="section">
+        <h2 class="section-title">Domains</h2>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label" id="domainListTitle">Blocklist</label>
+            <p class="field-desc" id="domainListDesc">
+              Tabs from these domains will be auto-closed. Supports exact domains
+              (<code>github.com</code>) and path patterns (<code>github.com/myorg/*</code>).
+            </p>
+            <div class="add-domain-row">
+              <input class="input" type="text" id="domainInput"
+                placeholder="e.g. twitter.com or reddit.com/r/programming/*" />
+              <button class="btn btn-primary" id="addDomainBtn">Add</button>
+            </div>
+            <ul class="domain-list" id="domainList"></ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field-label">Per-domain TTL</label>
+            <p class="field-desc">Override the global TTL for specific domains.</p>
+            <div class="add-domain-row">
+              <input class="input" type="text" id="perDomainPattern" placeholder="e.g. gmail.com" />
+              <input class="input input-sm" type="number" id="perDomainValue" min="1" max="9999" placeholder="TTL" />
+              <select class="select" id="perDomainUnit">
+                <option value="m" selected>min</option>
+                <option value="h">hr</option>
+                <option value="s">sec</option>
+              </select>
+              <button class="btn btn-primary" id="addPerDomainBtn">Add</button>
+            </div>
+            <ul class="domain-list" id="perDomainList"></ul>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ── Advanced ─────────────────────────────────────────────────────── -->
+      <section id="section-advanced" class="section">
+        <h2 class="section-title">Advanced</h2>
+
+        <div class="card">
+          <div class="field">
+            <div class="field-header">
+              <label class="field-label" for="idleDetection">Idle detection</label>
+              <label class="toggle">
+                <input type="checkbox" id="idleDetection" />
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+            <p class="field-desc">
+              Pause auto-closing when you're away from your computer. Tabs won't
+              expire while the system is idle, preventing surprise closures when
+              you return.
+            </p>
+          </div>
+          <div class="field" id="idleThresholdField">
+            <label class="field-label" for="idleThreshold">Idle threshold</label>
+            <div class="input-suffix-row">
+              <input class="input input-sm" type="number" id="idleThreshold" min="15" max="3600" step="1" />
+              <span class="input-suffix">seconds until considered idle</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ── History ──────────────────────────────────────────────────────── -->
+      <section id="section-history" class="section">
+        <h2 class="section-title">Closed Tab History</h2>
+
+        <div class="card">
+          <div class="history-toolbar">
+            <span class="history-meta-text" id="historyMeta"></span>
+            <button class="btn btn-danger-outline" id="clearHistoryBtn">Clear all</button>
+          </div>
+          <ul class="history-entries" id="historyEntries"></ul>
+        </div>
+      </section>
+
+      <!-- ── Analytics ────────────────────────────────────────────────────── -->
+      <section id="section-analytics" class="section">
+        <h2 class="section-title">Analytics</h2>
+
+        <div class="period-toggle">
+          <button class="period-btn active" id="analytics-period-week">Last 7 days</button>
+          <button class="period-btn" id="analytics-period-month">Last 30 days</button>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="stat-tabs-closed">—</div>
+            <div class="stat-label">Tabs closed</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-time-saved">—</div>
+            <div class="stat-label">Time saved</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-memory">—</div>
+            <div class="stat-label">Memory freed</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <p class="chart-section-title">Top domains closed</p>
+          <div id="top-domains-chart"></div>
+        </div>
+
+        <div class="card">
+          <p class="chart-section-title">Closes by hour of day</p>
+          <div id="hourly-chart"></div>
+        </div>
+
+        <div class="card">
+          <p class="chart-section-title">Tab count streak</p>
+          <p class="field-desc" style="margin-bottom:12px;">
+            Days in a row your open tab count stayed within the streak limit.
+          </p>
+          <div class="streak-grid">
+            <div class="streak-card">
+              <div class="streak-value" id="streak-current">—</div>
+              <div class="streak-label">Current streak (days)</div>
+            </div>
+            <div class="streak-card">
+              <div class="streak-value" id="streak-best">—</div>
+              <div class="streak-label">Best streak (days)</div>
+            </div>
+            <div class="streak-card">
+              <div class="streak-value" id="streak-last-broken">—</div>
+              <div class="streak-label">Last broken</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="analytics-actions">
+          <button class="btn btn-danger-outline" id="clearAnalyticsBtn">Clear analytics data</button>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- Save toast -->
+  <div class="save-toast" id="saveToast">Settings saved</div>
+
+  <script src="options.js" type="module"></script>
+</body>
+</html>
