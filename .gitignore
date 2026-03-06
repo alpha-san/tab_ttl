@@ -1,6 +1,7 @@
 # Build artifacts
 dist/
 *.zip
+screenshots/
 
 # Dependencies
 node_modules/

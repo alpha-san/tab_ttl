@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TabTTL",
   "version": "1.0.0",
-  "description": "Automatically close tabs after a configurable TTL. Supports allowlist/blocklist modes, per-domain TTL, grace period, and tab recovery.",
+  "description": "Auto-close tabs after a configurable TTL. Supports allowlist/blocklist modes, per-domain TTL, grace period, and tab recovery.",
   "permissions": [
     "tabs",
     "storage",
