@@ -235,6 +235,19 @@ header {
   font-weight: 600;
 }
 .btn-small.btn-undo:hover { background: rgba(242,139,130,.12); }
+.btn-small.btn-protect {
+  padding: 3px 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+.btn-small.btn-protect.active {
+  border-color: var(--success);
+  color: var(--success);
+  background: rgba(129,201,149,.10);
+}
+.btn-small.btn-protect.active:hover {
+  background: rgba(129,201,149,.20);
+}
 
 /* TTL row */
 .tab-ttl-row {
