@@ -161,6 +161,7 @@ async function checkTabTTLs() {
       if (manuallyProtected.has(t.id)) return false;
       if (snoozed[t.id] && snoozed[t.id] > now) return false;
       if (pendingGrace[t.id]) return false;
+      if (t.audible && !t.mutedInfo?.muted) return false;
       return true;
     });
     if (eligible.length < 2) continue;

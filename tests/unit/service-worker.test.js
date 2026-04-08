@@ -712,5 +712,28 @@ describe('duplicate tab detection', () => {
       expect(getRemovedTabIds()).toEqual([]);
       vi.useRealTimers();
     });
+
+    it('keeps audible unmuted duplicate during periodic check', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000000);
+
+      await chrome.storage.sync.set({
+        settings: { enabled: true, ttl: 99999999, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      });
+      await chrome.storage.sync.set({ blocklist: [] });
+      await chrome.storage.local.set({
+        tabLastAccessed: { 1: 500000, 2: 900000 },
+      });
+
+      setTabs([
+        { id: 1, windowId: 10, url: 'https://example.com/page', title: 'Old', pinned: false, active: false, audible: true, mutedInfo: { muted: false } },
+        { id: 2, windowId: 10, url: 'https://example.com/page', title: 'New', pinned: false, active: false },
+      ]);
+
+      await sendMessage({ type: 'FORCE_CHECK' });
+
+      expect(getRemovedTabIds()).toEqual([]);
+      vi.useRealTimers();
+    });
   });
 });
