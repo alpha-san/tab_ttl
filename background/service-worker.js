@@ -17,6 +17,7 @@ import {
   getPendingGrace, savePendingGrace,
   getAnalyticsLog, saveAnalyticsLog,
   getAnalyticsState, saveAnalyticsState,
+  getManuallyProtected, saveManuallyProtected,
 } from '../utils/storage.js';
 import { matchesAny } from '../utils/domain-matcher.js';
 
@@ -77,6 +78,12 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   delete snoozed[tabId];
   await saveSnoozed(snoozed);
 
+  const manuallyProtected = await getManuallyProtected();
+  if (manuallyProtected.has(tabId)) {
+    manuallyProtected.delete(tabId);
+    await saveManuallyProtected(manuallyProtected);
+  }
+
   await cancelGrace(tabId, /* removeFromHistory */ false);
 });
 
@@ -110,7 +117,7 @@ async function checkTabTTLs() {
     if (state !== 'active') return;
   }
 
-  const [allowlist, blocklist, perDomainTTL, lastAccessed, snoozed, pendingGrace] =
+  const [allowlist, blocklist, perDomainTTL, lastAccessed, snoozed, pendingGrace, manuallyProtected] =
     await Promise.all([
       getAllowlist(),
       getBlocklist(),
@@ -118,6 +125,7 @@ async function checkTabTTLs() {
       getTabLastAccessed(),
       getSnoozed(),
       getPendingGrace(),
+      getManuallyProtected(),
     ]);
 
   const now = Date.now();
@@ -130,6 +138,7 @@ async function checkTabTTLs() {
   for (const tab of allTabs) {
     if (tab.id == null) continue;
     if (tab.pinned) continue;                    // Never close pinned tabs
+    if (manuallyProtected.has(tab.id)) continue; // Never close manually protected tabs
     if (activeTabIds.has(tab.id)) continue;      // Never close active tab
     if (pendingGrace[tab.id]) continue;          // Already queued for grace close
 
@@ -216,6 +225,8 @@ async function closeTabAfterGrace(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (tab.active || tab.pinned) return; // Last-second protection
+    const manuallyProtected = await getManuallyProtected();
+    if (manuallyProtected.has(tabId)) return;
 
     const ts = Date.now();
     const lastAccessed = await getTabLastAccessed();
@@ -369,6 +380,14 @@ async function handleMessage(message) {
       await saveAnalyticsLog([]);
       return { ok: true };
 
+    case 'TOGGLE_PROTECT_TAB': {
+      const set = await getManuallyProtected();
+      const isNowProtected = !set.has(message.tabId);
+      isNowProtected ? set.add(message.tabId) : set.delete(message.tabId);
+      await saveManuallyProtected(set);
+      return { protected: isNowProtected };
+    }
+
     default:
       throw new Error(`Unknown message type: ${message.type}`);
   }
@@ -377,11 +396,12 @@ async function handleMessage(message) {
 // ─── Tab info for popup ───────────────────────────────────────────────────────
 
 async function getTabInfo() {
-  const [settings, lastAccessed, snoozed, pendingGrace] = await Promise.all([
+  const [settings, lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
     getSettings(),
     getTabLastAccessed(),
     getSnoozed(),
     getPendingGrace(),
+    getManuallyProtected(),
   ]);
 
   const allTabs = await chrome.tabs.query({});
@@ -393,7 +413,8 @@ async function getTabInfo() {
   const tabs = allTabs.map(tab => {
     const accessed = lastAccessed[tab.id] ?? now;
     const age = now - accessed;
-    const isProtected = tab.pinned || activeTabIds.has(tab.id);
+    const isManuallyProtected = manuallyProtected.has(tab.id);
+    const isProtected = tab.pinned || activeTabIds.has(tab.id) || isManuallyProtected;
     const snoozeUntil = snoozed[tab.id] ?? null;
     const isSnoozed = snoozeUntil != null && snoozeUntil > now;
     const inGrace = !!pendingGrace[tab.id];
@@ -409,6 +430,7 @@ async function getTabInfo() {
       pinned: tab.pinned,
       active: activeTabIds.has(tab.id),
       isProtected,
+      manuallyProtected: isManuallyProtected,
       age,
       ttl,
       remaining: isProtected || isSnoozed ? null : Math.max(0, ttl - age),
