@@ -3,6 +3,7 @@
   "name": "TabTTL",
   "version": "1.0.0",
   "description": "Auto-close tabs after a configurable TTL. Supports allowlist/blocklist modes, per-domain TTL, grace period, and tab recovery.",
+  "minimum_chrome_version": "102",
   "permissions": [
     "tabs",
     "storage",

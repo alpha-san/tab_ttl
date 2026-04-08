@@ -383,7 +383,11 @@ async function handleMessage(message) {
     case 'TOGGLE_PROTECT_TAB': {
       const set = await getManuallyProtected();
       const isNowProtected = !set.has(message.tabId);
-      isNowProtected ? set.add(message.tabId) : set.delete(message.tabId);
+      if (isNowProtected) {
+        set.add(message.tabId);
+      } else {
+        set.delete(message.tabId);
+      }
       await saveManuallyProtected(set);
       return { protected: isNowProtected };
     }
