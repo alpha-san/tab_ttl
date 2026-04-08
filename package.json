@@ -5,9 +5,12 @@
   "private": true,
   "scripts": {
     "build": "bash scripts/build.sh",
-    "lint": "node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json OK')\" && find background popup options utils -name '*.js' | xargs node --check && echo 'JS syntax OK'"
+    "lint": "node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json OK')\" && find background popup options utils -name '*.js' | xargs node --check && echo 'JS syntax OK'",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "chrome-webstore-upload-cli": "^3.0.0"
+    "chrome-webstore-upload-cli": "^3.0.0",
+    "vitest": "^4.1.3"
   }
 }
