@@ -365,6 +365,7 @@ async function closeTabAfterGrace(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (tab.active || tab.pinned) return; // Last-second protection
+    if (tab.audible && !tab.mutedInfo?.muted) return; // Tab started playing — don't close
     const manuallyProtected = await getManuallyProtected();
     if (manuallyProtected.has(tabId)) return; // Grace state already cleared above; TTL re-evaluated on next alarm tick
 

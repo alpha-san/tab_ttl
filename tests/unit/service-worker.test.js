@@ -760,3 +760,35 @@ describe('duplicate tab detection', () => {
     });
   });
 });
+
+describe('closeTabAfterGrace audible protection', () => {
+  it('cancels grace close if tab became audible', async () => {
+    await importPromise;
+    vi.useFakeTimers();
+    vi.setSystemTime(5000);
+
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 1000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+    });
+    await chrome.storage.local.set({
+      tabLastAccessed: { 1: 0 },
+      pendingGrace: { 1: { tabId: 1, url: 'https://a.com', title: 'Test', closeAt: 5000 } },
+    });
+
+    setTabs([
+      { id: 1, url: 'https://a.com', pinned: false, active: false, audible: true, mutedInfo: { muted: false } },
+    ]);
+
+    // Fire the grace alarm
+    await alarmHandler({ name: 'tabTTL-grace-1' });
+
+    // Tab should NOT have been removed
+    expect(getRemovedTabIds()).toEqual([]);
+
+    // Grace state should be cleared
+    const { pendingGrace } = await chrome.storage.local.get('pendingGrace');
+    expect(pendingGrace[1]).toBeUndefined();
+
+    vi.useRealTimers();
+  });
+});
