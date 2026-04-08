@@ -862,4 +862,32 @@ describe('onUpdated audible grace cancellation', () => {
 
     vi.useRealTimers();
   });
+
+  it('cancels grace when audible tab is unmuted via mutedInfo change', async () => {
+    await importPromise;
+    vi.useFakeTimers();
+    vi.setSystemTime(5000);
+
+    await chrome.storage.local.set({
+      tabLastAccessed: { 1: 0 },
+      pendingGrace: { 1: { tabId: 1, url: 'https://a.com', title: 'Test', closeAt: 6000 } },
+    });
+
+    setTabs([
+      { id: 1, url: 'https://a.com', pinned: false, active: false, audible: true, mutedInfo: { muted: false } },
+    ]);
+
+    // Simulate unmuting — Chrome fires onUpdated with mutedInfo, not audible
+    await onUpdatedHandler(1, { mutedInfo: { muted: false } });
+
+    // Grace should be cancelled
+    const { pendingGrace } = await chrome.storage.local.get('pendingGrace');
+    expect(pendingGrace[1]).toBeUndefined();
+
+    // lastAccessed should be reset
+    const { tabLastAccessed } = await chrome.storage.local.get('tabLastAccessed');
+    expect(tabLastAccessed[1]).toBe(5000);
+
+    vi.useRealTimers();
+  });
 });

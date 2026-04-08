@@ -21,6 +21,11 @@ import {
 } from '../utils/storage.js';
 import { matchesAny } from '../utils/domain-matcher.js';
 
+/** True when a tab is actively producing unmuted audio. */
+function isTabAudible(tab) {
+  return tab.audible && !tab.mutedInfo?.muted;
+}
+
 // ─── Initialization ───────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -66,10 +71,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.url) {
     await closeDuplicateTab(tabId);
   }
-  if (changeInfo.audible) {
+  if (changeInfo.audible || changeInfo.mutedInfo) {
     try {
       const tab = await chrome.tabs.get(tabId);
-      if (tab.audible && !tab.mutedInfo?.muted) {
+      if (isTabAudible(tab)) {
         await cancelGrace(tabId);
         await updateLastAccessed(tabId);
       }
@@ -170,7 +175,7 @@ async function checkTabTTLs() {
       if (manuallyProtected.has(t.id)) return false;
       if (snoozed[t.id] && snoozed[t.id] > now) return false;
       if (pendingGrace[t.id]) return false;
-      if (t.audible && !t.mutedInfo?.muted) return false;
+      if (isTabAudible(t)) return false;
       return true;
     });
     if (eligible.length < 2) continue;
@@ -209,7 +214,7 @@ async function checkTabTTLs() {
     if (closedByDedup.has(tab.id)) continue;     // Already closed as duplicate
     if (tab.pinned) continue;                    // Never close pinned tabs
     if (manuallyProtected.has(tab.id)) continue; // Never close manually protected tabs
-    if (tab.audible && !tab.mutedInfo?.muted) continue; // Never close audible unmuted tabs
+    if (isTabAudible(tab)) continue; // Never close audible unmuted tabs
     if (activeTabIds.has(tab.id)) continue;      // Never close active tab
     if (pendingGrace[tab.id]) continue;          // Already queued for grace close
 
@@ -302,7 +307,7 @@ async function closeDuplicateTab(tabId) {
     if (manuallyProtected.has(t.id)) return false;
     if (snoozed[t.id] && snoozed[t.id] > now) return false;
     if (pendingGrace[t.id]) return false;
-    if (t.audible && !t.mutedInfo?.muted) return false;
+    if (isTabAudible(t)) return false;
     return normalizeUrlForDedup(t.url) === normalizedUrl;
   });
 
@@ -374,7 +379,7 @@ async function closeTabAfterGrace(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (tab.active || tab.pinned) return; // Last-second protection
-    if (tab.audible && !tab.mutedInfo?.muted) return; // Tab started playing — don't close
+    if (isTabAudible(tab)) return; // Tab started playing — don't close
     const manuallyProtected = await getManuallyProtected();
     if (manuallyProtected.has(tabId)) return; // Grace state already cleared above; TTL re-evaluated on next alarm tick
 
@@ -568,7 +573,7 @@ async function getTabInfo() {
     const accessed = lastAccessed[tab.id] ?? now;
     const age = now - accessed;
     const isManuallyProtected = manuallyProtected.has(tab.id);
-    const isAudible = tab.audible && !tab.mutedInfo?.muted;
+    const isAudible = isTabAudible(tab);
     const isProtected = tab.pinned || activeTabIds.has(tab.id) || isManuallyProtected || isAudible;
     const snoozeUntil = snoozed[tab.id] ?? null;
     const isSnoozed = snoozeUntil != null && snoozeUntil > now;
