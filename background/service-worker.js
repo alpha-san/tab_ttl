@@ -66,6 +66,15 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.url) {
     await closeDuplicateTab(tabId);
   }
+  if (changeInfo.audible) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.audible && !tab.mutedInfo?.muted) {
+        await cancelGrace(tabId);
+        await updateLastAccessed(tabId);
+      }
+    } catch { /* tab gone */ }
+  }
 });
 
 chrome.tabs.onCreated.addListener(async (tab) => {
