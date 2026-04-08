@@ -127,6 +127,7 @@ function renderTabItem(tab, settings) {
   if (tab.pinned)    badges.push('<span class="badge badge-pinned">Pinned</span>');
   if (tab.isSnoozed) badges.push('<span class="badge badge-snoozed">Snoozed</span>');
   if (tab.inGrace)   badges.push('<span class="badge badge-grace">Closing…</span>');
+  if (tab.audible)   badges.push('<span class="badge badge-audible">Playing</span>');
 
   let actionHtml = '';
   if (tab.inGrace) {

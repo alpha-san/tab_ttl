@@ -203,6 +203,7 @@ header {
 .badge-pinned  { background: rgba(138,180,248,.15); color: var(--primary); }
 .badge-snoozed { background: rgba(253,214,99,.15);  color: var(--warning); }
 .badge-grace   { background: rgba(242,139,130,.15); color: var(--danger);  }
+.badge-audible { background: rgba(187,134,252,.15); color: #bb86fc; }
 
 /* Actions */
 .tab-actions {

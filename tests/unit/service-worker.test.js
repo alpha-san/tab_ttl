@@ -107,6 +107,24 @@ describe('handleMessage', () => {
     expect(result.settings).toBeDefined();
   });
 
+  it('GET_TAB_INFO marks audible unmuted tab as protected', async () => {
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'Music', url: 'https://spotify.com', pinned: false, active: false, audible: true, mutedInfo: { muted: false } },
+    ]);
+    const result = await sendMessage({ type: 'GET_TAB_INFO' });
+    expect(result.tabs[0].audible).toBe(true);
+    expect(result.tabs[0].isProtected).toBe(true);
+  });
+
+  it('GET_TAB_INFO does not mark audible muted tab as protected', async () => {
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'Music', url: 'https://spotify.com', pinned: false, active: false, audible: true, mutedInfo: { muted: true } },
+    ]);
+    const result = await sendMessage({ type: 'GET_TAB_INFO' });
+    expect(result.tabs[0].audible).toBe(false);
+    expect(result.tabs[0].isProtected).toBe(false);
+  });
+
   it('GET_ANALYTICS_DATA returns log and state', async () => {
     await chrome.storage.local.set({
       analyticsLog: [{ ts: 1000 }],

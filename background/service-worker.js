@@ -568,7 +568,8 @@ async function getTabInfo() {
     const accessed = lastAccessed[tab.id] ?? now;
     const age = now - accessed;
     const isManuallyProtected = manuallyProtected.has(tab.id);
-    const isProtected = tab.pinned || activeTabIds.has(tab.id) || isManuallyProtected;
+    const isAudible = tab.audible && !tab.mutedInfo?.muted;
+    const isProtected = tab.pinned || activeTabIds.has(tab.id) || isManuallyProtected || isAudible;
     const snoozeUntil = snoozed[tab.id] ?? null;
     const isSnoozed = snoozeUntil != null && snoozeUntil > now;
     const inGrace = !!pendingGrace[tab.id];
@@ -585,6 +586,7 @@ async function getTabInfo() {
       active: activeTabIds.has(tab.id),
       isProtected,
       manuallyProtected: isManuallyProtected,
+      audible: isAudible,
       age,
       ttl,
       remaining: isProtected || isSnoozed ? null : Math.max(0, ttl - age),
