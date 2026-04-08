@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { setTabs, resetAll, getRemovedTabIds } from '../setup.js';
+import { setTabs, resetAll, getRemovedTabIds, getAlarms } from '../setup.js';
 
 // Dynamic import so Chrome mock is in place when module loads
 let messageHandler;
@@ -625,6 +625,34 @@ describe('duplicate tab detection', () => {
       await sendMessage({ type: 'FORCE_CHECK' });
 
       expect(getRemovedTabIds()).toEqual([]);
+      vi.useRealTimers();
+    });
+
+    it('does not initiate grace for tab already closed as duplicate', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000000);
+
+      // Tab 1 is a duplicate AND TTL-expired — dedup should close it,
+      // and the TTL loop should NOT create a grace alarm for it.
+      await chrome.storage.sync.set({
+        settings: { enabled: true, ttl: 1000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      });
+      await chrome.storage.sync.set({ blocklist: ['example.com'] });
+      await chrome.storage.local.set({
+        tabLastAccessed: { 1: 0, 2: 900000 },
+      });
+
+      setTabs([
+        { id: 1, windowId: 10, url: 'https://example.com/page', title: 'Old', pinned: false, active: false },
+        { id: 2, windowId: 10, url: 'https://example.com/page', title: 'New', pinned: false, active: false },
+      ]);
+
+      await sendMessage({ type: 'FORCE_CHECK' });
+
+      // Tab 1 should be closed as a duplicate
+      expect(getRemovedTabIds()).toContain(1);
+      // No grace alarm should be created for tab 1 (it was already closed as a duplicate)
+      expect(getAlarms().has('tabTTL-grace-1')).toBe(false);
       vi.useRealTimers();
     });
 

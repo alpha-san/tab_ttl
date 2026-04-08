@@ -142,6 +142,7 @@ async function checkTabTTLs() {
   const activeTabIds = new Set(activeTabs.map(t => t.id));
 
   // ── Duplicate tab sweep ──────────────────────────────────────────────────
+  const closedByDedup = new Set();
   const dupMap = new Map(); // key: "windowId:normalizedUrl" → [tab, ...]
   for (const tab of allTabs) {
     if (tab.id == null) continue;
@@ -188,12 +189,14 @@ async function checkTabTTLs() {
 
       try {
         await chrome.tabs.remove(dup.id);
+        closedByDedup.add(dup.id);
       } catch { /* tab already gone */ }
     }
   }
 
   for (const tab of allTabs) {
     if (tab.id == null) continue;
+    if (closedByDedup.has(tab.id)) continue;     // Already closed as duplicate
     if (tab.pinned) continue;                    // Never close pinned tabs
     if (manuallyProtected.has(tab.id)) continue; // Never close manually protected tabs
     if (activeTabIds.has(tab.id)) continue;      // Never close active tab
