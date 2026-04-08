@@ -460,6 +460,54 @@ describe('duplicate tab detection', () => {
     vi.useRealTimers();
   });
 
+  it('skips snoozed duplicate tabs', async () => {
+    await importPromise;
+    vi.useFakeTimers();
+    vi.setSystemTime(2000);
+
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 60000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+    });
+    await chrome.storage.local.set({
+      tabLastAccessed: { 1: 1000, 2: 2000 },
+      snoozed: { 1: 9999999 },
+    });
+
+    setTabs([
+      { id: 1, windowId: 10, url: 'https://example.com/page', pinned: false, active: false },
+      { id: 2, windowId: 10, url: 'https://example.com/page', pinned: false, active: false },
+    ]);
+
+    await onCreatedHandler({ id: 2, windowId: 10, url: 'https://example.com/page' });
+
+    expect(getRemovedTabIds()).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it('skips duplicate tabs in grace period', async () => {
+    await importPromise;
+    vi.useFakeTimers();
+    vi.setSystemTime(2000);
+
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 60000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+    });
+    await chrome.storage.local.set({
+      tabLastAccessed: { 1: 1000, 2: 2000 },
+      pendingGrace: { 1: { tabId: 1, closeAt: 5000 } },
+    });
+
+    setTabs([
+      { id: 1, windowId: 10, url: 'https://example.com/page', pinned: false, active: false },
+      { id: 2, windowId: 10, url: 'https://example.com/page', pinned: false, active: false },
+    ]);
+
+    await onCreatedHandler({ id: 2, windowId: 10, url: 'https://example.com/page' });
+
+    expect(getRemovedTabIds()).toEqual([]);
+    vi.useRealTimers();
+  });
+
   it('skips non-http URLs', async () => {
     await importPromise;
     vi.useFakeTimers();

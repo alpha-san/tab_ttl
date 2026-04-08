@@ -218,11 +218,12 @@ async function closeDuplicateTab(tabId) {
   if (!normalizedUrl) return;
 
   const windowTabs = await chrome.tabs.query({ windowId: triggerTab.windowId });
-  const [lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
+  const [lastAccessed, snoozed, pendingGrace, manuallyProtected, perDomainTTL] = await Promise.all([
     getTabLastAccessed(),
     getSnoozed(),
     getPendingGrace(),
     getManuallyProtected(),
+    getPerDomainTTL(),
   ]);
 
   const activeTabs = await chrome.tabs.query({ active: true });
@@ -246,7 +247,6 @@ async function closeDuplicateTab(tabId) {
     let ttlMs = 0;
     try {
       domain = new URL(dup.url).hostname;
-      const perDomainTTL = await getPerDomainTTL();
       ttlMs = resolveTabTTL(dup.url, perDomainTTL, settings.ttl);
     } catch { /* ignore */ }
 
