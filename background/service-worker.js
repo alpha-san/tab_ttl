@@ -63,10 +63,16 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.url || changeInfo.status === 'loading') {
     await updateLastAccessed(tabId);
   }
+  if (changeInfo.url) {
+    await closeDuplicateTab(tabId);
+  }
 });
 
 chrome.tabs.onCreated.addListener(async (tab) => {
-  if (tab.id != null) await updateLastAccessed(tab.id);
+  if (tab.id != null) {
+    await updateLastAccessed(tab.id);
+    await closeDuplicateTab(tab.id);
+  }
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -180,6 +186,83 @@ function resolveTabTTL(url, perDomainTTL, globalTTL) {
     }
   } catch { /* ignore */ }
   return globalTTL;
+}
+
+/**
+ * Strip the fragment from a URL for duplicate comparison.
+ * Returns null for non-http(s) URLs.
+ */
+function normalizeUrlForDedup(url) {
+  if (!url || !url.startsWith('http')) return null;
+  try {
+    const u = new URL(url);
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function closeDuplicateTab(tabId) {
+  const settings = await getSettings();
+  if (!settings.enabled) return;
+
+  let triggerTab;
+  try {
+    triggerTab = await chrome.tabs.get(tabId);
+  } catch {
+    return; // Tab already gone
+  }
+
+  const normalizedUrl = normalizeUrlForDedup(triggerTab.url);
+  if (!normalizedUrl) return;
+
+  const windowTabs = await chrome.tabs.query({ windowId: triggerTab.windowId });
+  const [lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
+    getTabLastAccessed(),
+    getSnoozed(),
+    getPendingGrace(),
+    getManuallyProtected(),
+  ]);
+
+  const activeTabs = await chrome.tabs.query({ active: true });
+  const activeTabIds = new Set(activeTabs.map(t => t.id));
+  const now = Date.now();
+
+  const duplicates = windowTabs.filter(t => {
+    if (t.id === tabId) return false;
+    if (t.pinned) return false;
+    if (activeTabIds.has(t.id)) return false;
+    if (manuallyProtected.has(t.id)) return false;
+    if (snoozed[t.id] && snoozed[t.id] > now) return false;
+    if (pendingGrace[t.id]) return false;
+    return normalizeUrlForDedup(t.url) === normalizedUrl;
+  });
+
+  for (const dup of duplicates) {
+    const openedAt = lastAccessed[dup.id] ?? now;
+
+    let domain = '';
+    let ttlMs = 0;
+    try {
+      domain = new URL(dup.url).hostname;
+      const perDomainTTL = await getPerDomainTTL();
+      ttlMs = resolveTabTTL(dup.url, perDomainTTL, settings.ttl);
+    } catch { /* ignore */ }
+
+    await appendAnalyticsEvent({ ts: now, openedAt, domain, ttlMs, ageMs: now - openedAt });
+    await addToClosedHistory({
+      tabId: dup.id,
+      url: dup.url,
+      title: dup.title,
+      favIconUrl: dup.favIconUrl,
+      closedAt: now,
+    });
+
+    try {
+      await chrome.tabs.remove(dup.id);
+    } catch { /* tab already gone */ }
+  }
 }
 
 // ─── Grace period ─────────────────────────────────────────────────────────────
