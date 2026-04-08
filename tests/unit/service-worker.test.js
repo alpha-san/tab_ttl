@@ -579,4 +579,76 @@ describe('duplicate tab detection', () => {
     expect(analyticsLog[0].domain).toBe('example.com');
     vi.useRealTimers();
   });
+
+  describe('periodic sweep via FORCE_CHECK', () => {
+    it('closes older duplicate during periodic check', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000000);
+
+      await chrome.storage.sync.set({
+        settings: { enabled: true, ttl: 99999999, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      });
+      await chrome.storage.sync.set({ blocklist: [] });
+      await chrome.storage.local.set({
+        tabLastAccessed: { 1: 500000, 2: 900000 },
+      });
+
+      setTabs([
+        { id: 1, windowId: 10, url: 'https://example.com/page', title: 'Old', pinned: false, active: false },
+        { id: 2, windowId: 10, url: 'https://example.com/page', title: 'New', pinned: false, active: false },
+      ]);
+
+      await sendMessage({ type: 'FORCE_CHECK' });
+
+      expect(getRemovedTabIds()).toContain(1);
+      expect(getRemovedTabIds()).not.toContain(2);
+      vi.useRealTimers();
+    });
+
+    it('keeps both when older duplicate is pinned', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000000);
+
+      await chrome.storage.sync.set({
+        settings: { enabled: true, ttl: 99999999, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      });
+      await chrome.storage.sync.set({ blocklist: [] });
+      await chrome.storage.local.set({
+        tabLastAccessed: { 1: 500000, 2: 900000 },
+      });
+
+      setTabs([
+        { id: 1, windowId: 10, url: 'https://example.com/page', pinned: true, active: false },
+        { id: 2, windowId: 10, url: 'https://example.com/page', pinned: false, active: false },
+      ]);
+
+      await sendMessage({ type: 'FORCE_CHECK' });
+
+      expect(getRemovedTabIds()).toEqual([]);
+      vi.useRealTimers();
+    });
+
+    it('does not close duplicates across different windows', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000000);
+
+      await chrome.storage.sync.set({
+        settings: { enabled: true, ttl: 99999999, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      });
+      await chrome.storage.sync.set({ blocklist: [] });
+      await chrome.storage.local.set({
+        tabLastAccessed: { 1: 500000, 2: 900000 },
+      });
+
+      setTabs([
+        { id: 1, windowId: 10, url: 'https://example.com/page', pinned: false, active: false },
+        { id: 2, windowId: 20, url: 'https://example.com/page', pinned: false, active: false },
+      ]);
+
+      await sendMessage({ type: 'FORCE_CHECK' });
+
+      expect(getRemovedTabIds()).toEqual([]);
+      vi.useRealTimers();
+    });
+  });
 });

@@ -141,6 +141,57 @@ async function checkTabTTLs() {
   const activeTabs = await chrome.tabs.query({ active: true });
   const activeTabIds = new Set(activeTabs.map(t => t.id));
 
+  // ── Duplicate tab sweep ──────────────────────────────────────────────────
+  const dupMap = new Map(); // key: "windowId:normalizedUrl" → [tab, ...]
+  for (const tab of allTabs) {
+    if (tab.id == null) continue;
+    const norm = normalizeUrlForDedup(tab.url ?? '');
+    if (!norm) continue;
+    const key = `${tab.windowId}:${norm}`;
+    if (!dupMap.has(key)) dupMap.set(key, []);
+    dupMap.get(key).push(tab);
+  }
+
+  for (const [, group] of dupMap) {
+    if (group.length < 2) continue;
+    const eligible = group.filter(t => {
+      if (t.pinned) return false;
+      if (activeTabIds.has(t.id)) return false;
+      if (manuallyProtected.has(t.id)) return false;
+      if (snoozed[t.id] && snoozed[t.id] > now) return false;
+      if (pendingGrace[t.id]) return false;
+      return true;
+    });
+    if (eligible.length < 2) continue;
+
+    // Sort by lastAccessed descending — keep the most recent
+    eligible.sort((a, b) => (lastAccessed[b.id] ?? 0) - (lastAccessed[a.id] ?? 0));
+    const toClose = eligible.slice(1); // everything except the most recent
+
+    for (const dup of toClose) {
+      const openedAt = lastAccessed[dup.id] ?? now;
+      let domain = '';
+      let ttlMs = 0;
+      try {
+        domain = new URL(dup.url).hostname;
+        ttlMs = resolveTabTTL(dup.url, perDomainTTL, settings.ttl);
+      } catch { /* ignore */ }
+
+      await appendAnalyticsEvent({ ts: now, openedAt, domain, ttlMs, ageMs: now - openedAt });
+      await addToClosedHistory({
+        tabId: dup.id,
+        url: dup.url,
+        title: dup.title,
+        favIconUrl: dup.favIconUrl,
+        closedAt: now,
+      });
+
+      try {
+        await chrome.tabs.remove(dup.id);
+      } catch { /* tab already gone */ }
+    }
+  }
+
   for (const tab of allTabs) {
     if (tab.id == null) continue;
     if (tab.pinned) continue;                    // Never close pinned tabs
