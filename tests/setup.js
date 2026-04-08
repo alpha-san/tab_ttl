@@ -49,6 +49,9 @@ globalThis.chrome = {
       if (filter && filter.active === true) {
         result = result.filter(t => t.active);
       }
+      if (filter && filter.windowId != null) {
+        result = result.filter(t => t.windowId === filter.windowId);
+      }
       return result;
     }),
     get: vi.fn(async (id) => {
