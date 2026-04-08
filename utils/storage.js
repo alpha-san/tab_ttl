@@ -132,3 +132,14 @@ export async function getAnalyticsState() {
 export async function saveAnalyticsState(state) {
   await chrome.storage.local.set({ analyticsState: state });
 }
+
+// ─── Manually protected tabs (session, tab-id set) ────────────────────────────
+
+export async function getManuallyProtected() {
+  const { manuallyProtected = [] } = await chrome.storage.session.get('manuallyProtected');
+  return new Set(manuallyProtected);
+}
+
+export async function saveManuallyProtected(set) {
+  await chrome.storage.session.set({ manuallyProtected: [...set] });
+}
