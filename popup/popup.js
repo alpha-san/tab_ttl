@@ -112,6 +112,9 @@ function renderTabs(tabs, settings) {
   container.querySelectorAll('[data-undo]').forEach(btn => {
     btn.addEventListener('click', () => onUndo(parseInt(btn.dataset.undo, 10)));
   });
+  container.querySelectorAll('[data-protect]').forEach(btn => {
+    btn.addEventListener('click', () => onProtect(parseInt(btn.dataset.protect, 10)));
+  });
 }
 
 function renderTabItem(tab, settings) {
@@ -128,8 +131,12 @@ function renderTabItem(tab, settings) {
   let actionHtml = '';
   if (tab.inGrace) {
     actionHtml = `<button class="btn-small btn-undo" data-undo="${tab.id}">Undo</button>`;
+  } else if (tab.manuallyProtected) {
+    actionHtml = `<button class="btn-small btn-protect active" data-protect="${tab.id}" title="Unprotect tab">🛡</button>`;
   } else if (!tab.isProtected) {
-    actionHtml = `<button class="btn-small" data-snooze="${tab.id}" title="Snooze for ${settings.snoozeMinutes} min">+${settings.snoozeMinutes}m</button>`;
+    actionHtml = `
+      <button class="btn-small btn-protect" data-protect="${tab.id}" title="Protect tab">🛡</button>
+      <button class="btn-small" data-snooze="${tab.id}" title="Snooze for ${settings.snoozeMinutes} min">+${settings.snoozeMinutes}m</button>`;
   }
 
   const { ttlLabel, ttlClass, barWidth, barClass } = computeTTL(tab);
@@ -185,6 +192,11 @@ async function onSnooze(tabId) {
 
 async function onUndo(tabId) {
   await sendMessage({ type: 'CANCEL_GRACE', tabId });
+  await load();
+}
+
+async function onProtect(tabId) {
+  await sendMessage({ type: 'TOGGLE_PROTECT_TAB', tabId });
   await load();
 }
 
