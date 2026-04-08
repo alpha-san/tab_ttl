@@ -226,7 +226,7 @@ async function closeTabAfterGrace(tabId) {
     const tab = await chrome.tabs.get(tabId);
     if (tab.active || tab.pinned) return; // Last-second protection
     const manuallyProtected = await getManuallyProtected();
-    if (manuallyProtected.has(tabId)) return;
+    if (manuallyProtected.has(tabId)) return; // Grace state already cleared above; TTL re-evaluated on next alarm tick
 
     const ts = Date.now();
     const lastAccessed = await getTabLastAccessed();
