@@ -199,6 +199,7 @@ async function checkTabTTLs() {
     if (closedByDedup.has(tab.id)) continue;     // Already closed as duplicate
     if (tab.pinned) continue;                    // Never close pinned tabs
     if (manuallyProtected.has(tab.id)) continue; // Never close manually protected tabs
+    if (tab.audible && !tab.mutedInfo?.muted) continue; // Never close audible unmuted tabs
     if (activeTabIds.has(tab.id)) continue;      // Never close active tab
     if (pendingGrace[tab.id]) continue;          // Already queued for grace close
 

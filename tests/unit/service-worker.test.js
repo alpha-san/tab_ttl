@@ -281,6 +281,40 @@ describe('checkTabTTLs skip conditions (via FORCE_CHECK)', () => {
     expect(chrome.notifications.create).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  it('skips audible unmuted tabs', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000000);
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 1000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+    });
+    await chrome.storage.sync.set({ blocklist: ['a.com'] });
+    setTabs([
+      { id: 1, url: 'https://a.com', pinned: false, active: false, audible: true, mutedInfo: { muted: false } },
+    ]);
+    await chrome.storage.local.set({ tabLastAccessed: { 1: 0 } });
+
+    await sendMessage({ type: 'FORCE_CHECK' });
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('does not skip audible but muted tabs', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000000);
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 1000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+    });
+    await chrome.storage.sync.set({ blocklist: ['a.com'] });
+    setTabs([
+      { id: 1, url: 'https://a.com', pinned: false, active: false, audible: true, mutedInfo: { muted: true } },
+    ]);
+    await chrome.storage.local.set({ tabLastAccessed: { 1: 0 } });
+
+    await sendMessage({ type: 'FORCE_CHECK' });
+    expect(chrome.notifications.create).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
 });
 
 describe('tabs.onRemoved cleanup', () => {
