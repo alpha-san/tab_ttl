@@ -293,6 +293,7 @@ async function closeDuplicateTab(tabId) {
     if (manuallyProtected.has(t.id)) return false;
     if (snoozed[t.id] && snoozed[t.id] > now) return false;
     if (pendingGrace[t.id]) return false;
+    if (t.audible && !t.mutedInfo?.muted) return false;
     return normalizeUrlForDedup(t.url) === normalizedUrl;
   });
 
