@@ -19,7 +19,7 @@ import {
   getAnalyticsState, saveAnalyticsState,
   getManuallyProtected, saveManuallyProtected,
 } from '../utils/storage.js';
-import { matchesAny } from '../utils/domain-matcher.js';
+import { matchesAny, matchesPattern } from '../utils/domain-matcher.js';
 
 /** True when a tab is actively producing unmuted audio. */
 function isTabAudible(tab) {
@@ -126,6 +126,31 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // ─── TTL check ────────────────────────────────────────────────────────────────
 
+/**
+ * Single source of truth for "this tab should never be closed."
+ *
+ * Excludes snooze and pending-grace on purpose: those are in-flight states
+ * that each call site handles with its own branch (snooze can expire mid-sweep,
+ * pending-grace shouldn't re-trigger).
+ *
+ * @param {chrome.tabs.Tab} tab
+ * @param {{
+ *   activeTabIds: Set<number>,
+ *   manuallyProtected: Set<number>,
+ *   settings: { mode: string },
+ *   allowlist: string[],
+ * }} ctx
+ */
+function isTabProtected(tab, ctx) {
+  const { activeTabIds, manuallyProtected, settings, allowlist } = ctx;
+  if (tab.pinned) return true;
+  if (activeTabIds.has(tab.id)) return true;
+  if (manuallyProtected.has(tab.id)) return true;
+  if (isTabAudible(tab)) return true;
+  if (settings.mode === 'allowlist' && matchesAny(tab.url ?? '', allowlist)) return true;
+  return false;
+}
+
 async function checkTabTTLs() {
   const settings = await getSettings();
   if (!settings.enabled) return;
@@ -154,6 +179,7 @@ async function checkTabTTLs() {
   // Collect active tab IDs across all windows.
   const activeTabs = await chrome.tabs.query({ active: true });
   const activeTabIds = new Set(activeTabs.map(t => t.id));
+  const protectionCtx = { activeTabIds, manuallyProtected, settings, allowlist };
 
   // ── Duplicate tab sweep ──────────────────────────────────────────────────
   const closedByDedup = new Set();
@@ -170,12 +196,9 @@ async function checkTabTTLs() {
   for (const [, group] of dupMap) {
     if (group.length < 2) continue;
     const eligible = group.filter(t => {
-      if (t.pinned) return false;
-      if (activeTabIds.has(t.id)) return false;
-      if (manuallyProtected.has(t.id)) return false;
+      if (isTabProtected(t, protectionCtx)) return false;
       if (snoozed[t.id] && snoozed[t.id] > now) return false;
       if (pendingGrace[t.id]) return false;
-      if (isTabAudible(t)) return false;
       return true;
     });
     if (eligible.length < 2) continue;
@@ -212,21 +235,15 @@ async function checkTabTTLs() {
   for (const tab of allTabs) {
     if (tab.id == null) continue;
     if (closedByDedup.has(tab.id)) continue;     // Already closed as duplicate
-    if (tab.pinned) continue;                    // Never close pinned tabs
-    if (manuallyProtected.has(tab.id)) continue; // Never close manually protected tabs
-    if (isTabAudible(tab)) continue; // Never close audible unmuted tabs
-    if (activeTabIds.has(tab.id)) continue;      // Never close active tab
     if (pendingGrace[tab.id]) continue;          // Already queued for grace close
 
     const url = tab.url ?? '';
     if (!url.startsWith('http')) continue;       // Skip chrome://, about:, etc.
 
-    // Apply mode filter.
-    if (settings.mode === 'allowlist') {
-      if (matchesAny(url, allowlist)) continue;  // On safe list — protect it
-    } else {
-      if (!matchesAny(url, blocklist)) continue; // Not on block list — skip
-    }
+    if (isTabProtected(tab, protectionCtx)) continue;
+
+    // Blocklist mode: only consider tabs that match the blocklist.
+    if (settings.mode !== 'allowlist' && !matchesAny(url, blocklist)) continue;
 
     // Determine effective TTL for this tab.
     const ttl = resolveTabTTL(url, perDomainTTL, settings.ttl);
@@ -247,14 +264,14 @@ async function checkTabTTLs() {
 
 /**
  * Return the per-domain TTL for a URL if one exists, otherwise the global TTL.
+ * Delegates matching to `matchesPattern` so that port-bearing keys
+ * (e.g. `localhost:3000`) and path patterns work the same way they do for
+ * the allow/blocklist.
  */
 function resolveTabTTL(url, perDomainTTL, globalTTL) {
-  try {
-    const hostname = new URL(url).hostname;
-    for (const [pattern, ttl] of Object.entries(perDomainTTL)) {
-      if (hostname === pattern || hostname.endsWith('.' + pattern)) return ttl;
-    }
-  } catch { /* ignore */ }
+  for (const [pattern, ttl] of Object.entries(perDomainTTL)) {
+    if (matchesPattern(url, pattern)) return ttl;
+  }
   return globalTTL;
 }
 
@@ -288,7 +305,8 @@ async function closeDuplicateTab(tabId) {
   if (!normalizedUrl) return;
 
   const windowTabs = await chrome.tabs.query({ windowId: triggerTab.windowId });
-  const [lastAccessed, snoozed, pendingGrace, manuallyProtected, perDomainTTL] = await Promise.all([
+  const [allowlist, lastAccessed, snoozed, pendingGrace, manuallyProtected, perDomainTTL] = await Promise.all([
+    getAllowlist(),
     getTabLastAccessed(),
     getSnoozed(),
     getPendingGrace(),
@@ -300,14 +318,13 @@ async function closeDuplicateTab(tabId) {
   const activeTabIds = new Set(activeTabs.map(t => t.id));
   const now = Date.now();
 
+  const protectionCtx = { activeTabIds, manuallyProtected, settings, allowlist };
+
   const duplicates = windowTabs.filter(t => {
     if (t.id === tabId) return false;
-    if (t.pinned) return false;
-    if (activeTabIds.has(t.id)) return false;
-    if (manuallyProtected.has(t.id)) return false;
+    if (isTabProtected(t, protectionCtx)) return false;
     if (snoozed[t.id] && snoozed[t.id] > now) return false;
     if (pendingGrace[t.id]) return false;
-    if (isTabAudible(t)) return false;
     return normalizeUrlForDedup(t.url) === normalizedUrl;
   });
 
@@ -378,7 +395,7 @@ async function closeTabAfterGrace(tabId) {
 
   try {
     const tab = await chrome.tabs.get(tabId);
-    if (tab.active || tab.pinned) return; // Last-second protection
+    if (tab.active || tab.pinned) return; // Last-second protection (allowlist already enforced by checkTabTTLs)
     if (isTabAudible(tab)) return; // Tab started playing — don't close
     const manuallyProtected = await getManuallyProtected();
     if (manuallyProtected.has(tabId)) return; // Grace state already cleared above; TTL re-evaluated on next alarm tick
@@ -555,8 +572,9 @@ async function handleMessage(message) {
 // ─── Tab info for popup ───────────────────────────────────────────────────────
 
 async function getTabInfo() {
-  const [settings, lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
+  const [settings, allowlist, lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
     getSettings(),
+    getAllowlist(),
     getTabLastAccessed(),
     getSnoozed(),
     getPendingGrace(),
@@ -567,6 +585,8 @@ async function getTabInfo() {
   const activeTabs = await chrome.tabs.query({ active: true });
   const activeTabIds = new Set(activeTabs.map(t => t.id));
 
+  const protectionCtx = { activeTabIds, manuallyProtected, settings, allowlist };
+
   const now = Date.now();
 
   const tabs = allTabs.map(tab => {
@@ -574,7 +594,7 @@ async function getTabInfo() {
     const age = now - accessed;
     const isManuallyProtected = manuallyProtected.has(tab.id);
     const isAudible = isTabAudible(tab);
-    const isProtected = tab.pinned || activeTabIds.has(tab.id) || isManuallyProtected || isAudible;
+    const isProtected = isTabProtected(tab, protectionCtx);
     const snoozeUntil = snoozed[tab.id] ?? null;
     const isSnoozed = snoozeUntil != null && snoozeUntil > now;
     const inGrace = !!pendingGrace[tab.id];

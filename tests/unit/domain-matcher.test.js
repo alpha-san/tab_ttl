@@ -69,6 +69,37 @@ describe('matchesPattern', () => {
   });
 });
 
+describe('matchesPattern with ports', () => {
+  it('matches localhost:3000 against http://localhost:3000/foo', () => {
+    expect(matchesPattern('http://localhost:3000/foo', 'localhost:3000')).toBe(true);
+  });
+
+  it('does not match localhost:3000 against http://localhost:8080/foo', () => {
+    expect(matchesPattern('http://localhost:8080/foo', 'localhost:3000')).toBe(false);
+  });
+
+  it('does not match localhost:3000 against http://localhost/', () => {
+    expect(matchesPattern('http://localhost/', 'localhost:3000')).toBe(false);
+  });
+
+  it('bare localhost still matches http://localhost:3000/ (regression guard)', () => {
+    expect(matchesPattern('http://localhost:3000/', 'localhost')).toBe(true);
+  });
+
+  it('bare localhost still matches http://localhost/ (regression guard)', () => {
+    expect(matchesPattern('http://localhost/', 'localhost')).toBe(true);
+  });
+
+  it('app.clickup.com still matches https://app.clickup.com/t/123 (regression guard)', () => {
+    expect(matchesPattern('https://app.clickup.com/t/123', 'app.clickup.com')).toBe(true);
+  });
+
+  it('app.clickup.com/ only matches the root path (documents existing behavior)', () => {
+    expect(matchesPattern('https://app.clickup.com/', 'app.clickup.com/')).toBe(true);
+    expect(matchesPattern('https://app.clickup.com/t/123', 'app.clickup.com/')).toBe(false);
+  });
+});
+
 describe('matchesAny', () => {
   it('returns true if any pattern matches', () => {
     expect(matchesAny('https://github.com', ['gitlab.com', 'github.com'])).toBe(true);

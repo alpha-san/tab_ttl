@@ -17,6 +17,8 @@ export function getHostname(url) {
  * Patterns:
  *   'github.com'            — matches github.com and any subdomain
  *   'github.com/myorg/*'   — matches that path prefix on github.com/subdomains
+ *   'localhost:3000'        — matches a specific port (compares against
+ *                             URL.host when the pattern contains ':')
  */
 export function matchesPattern(url, pattern) {
   try {
@@ -27,9 +29,10 @@ export function matchesPattern(url, pattern) {
     const patternHost = slashIdx === -1 ? pattern : pattern.slice(0, slashIdx);
     const patternPath = slashIdx === -1 ? null : pattern.slice(slashIdx);
 
+    const target = patternHost.includes(':') ? u.host : u.hostname;
     const hostMatches =
-      u.hostname === patternHost ||
-      u.hostname.endsWith('.' + patternHost);
+      target === patternHost ||
+      target.endsWith('.' + patternHost);
 
     if (!hostMatches) return false;
     if (patternPath === null) return true;

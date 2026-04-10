@@ -125,6 +125,44 @@ describe('handleMessage', () => {
     expect(result.tabs[0].isProtected).toBe(false);
   });
 
+  it('GET_TAB_INFO marks an allowlisted tab as protected when mode is allowlist', async () => {
+    await chrome.storage.sync.set({
+      settings: { enabled: true, mode: 'allowlist', ttl: 60000, gracePeriod: 30, idleDetection: false },
+      allowlist: ['app.clickup.com'],
+    });
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'CU', url: 'https://app.clickup.com/t/123', pinned: false, active: false },
+    ]);
+    const result = await sendMessage({ type: 'GET_TAB_INFO' });
+    expect(result.tabs[0].isProtected).toBe(true);
+    expect(result.tabs[0].remaining).toBeNull();
+  });
+
+  it('GET_TAB_INFO does not mark an allowlisted tab as protected when mode is blocklist', async () => {
+    await chrome.storage.sync.set({
+      settings: { enabled: true, mode: 'blocklist', ttl: 60000, gracePeriod: 30, idleDetection: false },
+      allowlist: ['app.clickup.com'],
+      blocklist: [],
+    });
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'CU', url: 'https://app.clickup.com/t/123', pinned: false, active: false },
+    ]);
+    const result = await sendMessage({ type: 'GET_TAB_INFO' });
+    expect(result.tabs[0].isProtected).toBe(false);
+  });
+
+  it('GET_TAB_INFO marks a localhost:3000 tab as protected when localhost:3000 is allowlisted', async () => {
+    await chrome.storage.sync.set({
+      settings: { enabled: true, mode: 'allowlist', ttl: 60000, gracePeriod: 30, idleDetection: false },
+      allowlist: ['localhost:3000'],
+    });
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'Dev', url: 'http://localhost:3000/foo', pinned: false, active: false },
+    ]);
+    const result = await sendMessage({ type: 'GET_TAB_INFO' });
+    expect(result.tabs[0].isProtected).toBe(true);
+  });
+
   it('GET_ANALYTICS_DATA returns log and state', async () => {
     await chrome.storage.local.set({
       analyticsLog: [{ ts: 1000 }],
@@ -280,6 +318,35 @@ describe('checkTabTTLs skip conditions (via FORCE_CHECK)', () => {
       expect.objectContaining({ when: expect.any(Number) }),
     );
     expect(chrome.notifications.create).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('per-domain TTL with port-bearing key (localhost:3000) is honored', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000000);
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 1000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      blocklist: ['localhost'],
+      perDomainTTL: { 'localhost:3000': 60 * 60 * 1000 }, // 1 hour for :3000
+    });
+    setTabs([
+      { id: 1, url: 'http://localhost:3000/foo', pinned: false, active: false, title: 'Dev 3000' },
+      { id: 2, url: 'http://localhost:8080/foo', pinned: false, active: false, title: 'Dev 8080' },
+    ]);
+    await chrome.storage.local.set({ tabLastAccessed: { 1: 0, 2: 0 } });
+
+    await sendMessage({ type: 'FORCE_CHECK' });
+
+    // Tab 1 (localhost:3000) is covered by the per-domain entry — should NOT be in grace.
+    // Tab 2 (localhost:8080) falls through to global 1s TTL — should be in grace.
+    expect(chrome.alarms.create).toHaveBeenCalledWith(
+      'tabTTL-grace-2',
+      expect.objectContaining({ when: expect.any(Number) }),
+    );
+    expect(chrome.alarms.create).not.toHaveBeenCalledWith(
+      'tabTTL-grace-1',
+      expect.anything(),
+    );
     vi.useRealTimers();
   });
 
@@ -652,6 +719,49 @@ describe('duplicate tab detection', () => {
     await onCreatedHandler({ id: 2, windowId: 10, url: 'https://example.com/page' });
 
     expect(getRemovedTabIds()).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it('does not close an allowlisted duplicate when mode is allowlist', async () => {
+    await importPromise;
+    await chrome.storage.sync.set({
+      settings: { enabled: true, mode: 'allowlist', ttl: 60000, gracePeriod: 30, idleDetection: false },
+      allowlist: ['app.clickup.com'],
+    });
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'CU 1', url: 'https://app.clickup.com/t/abc', pinned: false, active: false },
+      { id: 2, windowId: 1, index: 1, title: 'CU 2', url: 'https://app.clickup.com/t/abc', pinned: false, active: false },
+    ]);
+
+    // Trigger dedup via the onCreated handler for tab 2 (newer tab)
+    await onCreatedHandler({ id: 2, windowId: 1, url: 'https://app.clickup.com/t/abc', pinned: false });
+
+    expect(getRemovedTabIds()).not.toContain(1);
+    expect(getRemovedTabIds()).not.toContain(2);
+  });
+
+  it('closes a duplicate even if its domain is on the allowlist when mode is blocklist', async () => {
+    await importPromise;
+    vi.useFakeTimers();
+    vi.setSystemTime(2000);
+
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 60000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      allowlist: ['app.clickup.com'],
+      blocklist: [],
+    });
+    await chrome.storage.local.set({
+      tabLastAccessed: { 1: 1000, 2: 2000 },
+    });
+
+    setTabs([
+      { id: 1, windowId: 10, url: 'https://app.clickup.com/t/abc', pinned: false, active: false },
+      { id: 2, windowId: 10, url: 'https://app.clickup.com/t/abc', pinned: false, active: false },
+    ]);
+
+    await onCreatedHandler({ id: 2, windowId: 10, url: 'https://app.clickup.com/t/abc' });
+
+    expect(getRemovedTabIds()).toContain(1);
     vi.useRealTimers();
   });
 
