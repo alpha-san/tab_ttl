@@ -126,6 +126,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // ─── TTL check ────────────────────────────────────────────────────────────────
 
+/**
+ * Single source of truth for "this tab should never be closed."
+ *
+ * Excludes snooze and pending-grace on purpose: those are in-flight states
+ * that each call site handles with its own branch (snooze can expire mid-sweep,
+ * pending-grace shouldn't re-trigger).
+ */
+function isTabProtected(tab, ctx) {
+  const { activeTabIds, manuallyProtected, settings, allowlist } = ctx;
+  if (tab.pinned) return true;
+  if (activeTabIds.has(tab.id)) return true;
+  if (manuallyProtected.has(tab.id)) return true;
+  if (isTabAudible(tab)) return true;
+  if (settings.mode === 'allowlist' && matchesAny(tab.url ?? '', allowlist)) return true;
+  return false;
+}
+
 async function checkTabTTLs() {
   const settings = await getSettings();
   if (!settings.enabled) return;
@@ -154,6 +171,7 @@ async function checkTabTTLs() {
   // Collect active tab IDs across all windows.
   const activeTabs = await chrome.tabs.query({ active: true });
   const activeTabIds = new Set(activeTabs.map(t => t.id));
+  const protectionCtx = { activeTabIds, manuallyProtected, settings, allowlist };
 
   // ── Duplicate tab sweep ──────────────────────────────────────────────────
   const closedByDedup = new Set();
@@ -170,12 +188,9 @@ async function checkTabTTLs() {
   for (const [, group] of dupMap) {
     if (group.length < 2) continue;
     const eligible = group.filter(t => {
-      if (t.pinned) return false;
-      if (activeTabIds.has(t.id)) return false;
-      if (manuallyProtected.has(t.id)) return false;
+      if (isTabProtected(t, protectionCtx)) return false;
       if (snoozed[t.id] && snoozed[t.id] > now) return false;
       if (pendingGrace[t.id]) return false;
-      if (isTabAudible(t)) return false;
       return true;
     });
     if (eligible.length < 2) continue;
@@ -212,21 +227,15 @@ async function checkTabTTLs() {
   for (const tab of allTabs) {
     if (tab.id == null) continue;
     if (closedByDedup.has(tab.id)) continue;     // Already closed as duplicate
-    if (tab.pinned) continue;                    // Never close pinned tabs
-    if (manuallyProtected.has(tab.id)) continue; // Never close manually protected tabs
-    if (isTabAudible(tab)) continue; // Never close audible unmuted tabs
-    if (activeTabIds.has(tab.id)) continue;      // Never close active tab
     if (pendingGrace[tab.id]) continue;          // Already queued for grace close
 
     const url = tab.url ?? '';
     if (!url.startsWith('http')) continue;       // Skip chrome://, about:, etc.
 
-    // Apply mode filter.
-    if (settings.mode === 'allowlist') {
-      if (matchesAny(url, allowlist)) continue;  // On safe list — protect it
-    } else {
-      if (!matchesAny(url, blocklist)) continue; // Not on block list — skip
-    }
+    if (isTabProtected(tab, protectionCtx)) continue;
+
+    // Blocklist mode: only consider tabs that match the blocklist.
+    if (settings.mode !== 'allowlist' && !matchesAny(url, blocklist)) continue;
 
     // Determine effective TTL for this tab.
     const ttl = resolveTabTTL(url, perDomainTTL, settings.ttl);
