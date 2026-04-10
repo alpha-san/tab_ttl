@@ -572,8 +572,9 @@ async function handleMessage(message) {
 // ─── Tab info for popup ───────────────────────────────────────────────────────
 
 async function getTabInfo() {
-  const [settings, lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
+  const [settings, allowlist, lastAccessed, snoozed, pendingGrace, manuallyProtected] = await Promise.all([
     getSettings(),
+    getAllowlist(),
     getTabLastAccessed(),
     getSnoozed(),
     getPendingGrace(),
@@ -584,6 +585,8 @@ async function getTabInfo() {
   const activeTabs = await chrome.tabs.query({ active: true });
   const activeTabIds = new Set(activeTabs.map(t => t.id));
 
+  const protectionCtx = { activeTabIds, manuallyProtected, settings, allowlist };
+
   const now = Date.now();
 
   const tabs = allTabs.map(tab => {
@@ -591,7 +594,7 @@ async function getTabInfo() {
     const age = now - accessed;
     const isManuallyProtected = manuallyProtected.has(tab.id);
     const isAudible = isTabAudible(tab);
-    const isProtected = tab.pinned || activeTabIds.has(tab.id) || isManuallyProtected || isAudible;
+    const isProtected = isTabProtected(tab, protectionCtx);
     const snoozeUntil = snoozed[tab.id] ?? null;
     const isSnoozed = snoozeUntil != null && snoozeUntil > now;
     const inGrace = !!pendingGrace[tab.id];
