@@ -132,6 +132,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
  * Excludes snooze and pending-grace on purpose: those are in-flight states
  * that each call site handles with its own branch (snooze can expire mid-sweep,
  * pending-grace shouldn't re-trigger).
+ *
+ * @param {chrome.tabs.Tab} tab
+ * @param {{
+ *   activeTabIds: Set<number>,
+ *   manuallyProtected: Set<number>,
+ *   settings: { mode: string },
+ *   allowlist: string[],
+ * }} ctx
  */
 function isTabProtected(tab, ctx) {
   const { activeTabIds, manuallyProtected, settings, allowlist } = ctx;
@@ -297,7 +305,8 @@ async function closeDuplicateTab(tabId) {
   if (!normalizedUrl) return;
 
   const windowTabs = await chrome.tabs.query({ windowId: triggerTab.windowId });
-  const [lastAccessed, snoozed, pendingGrace, manuallyProtected, perDomainTTL] = await Promise.all([
+  const [allowlist, lastAccessed, snoozed, pendingGrace, manuallyProtected, perDomainTTL] = await Promise.all([
+    getAllowlist(),
     getTabLastAccessed(),
     getSnoozed(),
     getPendingGrace(),
@@ -309,14 +318,13 @@ async function closeDuplicateTab(tabId) {
   const activeTabIds = new Set(activeTabs.map(t => t.id));
   const now = Date.now();
 
+  const protectionCtx = { activeTabIds, manuallyProtected, settings, allowlist };
+
   const duplicates = windowTabs.filter(t => {
     if (t.id === tabId) return false;
-    if (t.pinned) return false;
-    if (activeTabIds.has(t.id)) return false;
-    if (manuallyProtected.has(t.id)) return false;
+    if (isTabProtected(t, protectionCtx)) return false;
     if (snoozed[t.id] && snoozed[t.id] > now) return false;
     if (pendingGrace[t.id]) return false;
-    if (isTabAudible(t)) return false;
     return normalizeUrlForDedup(t.url) === normalizedUrl;
   });
 

@@ -655,6 +655,24 @@ describe('duplicate tab detection', () => {
     vi.useRealTimers();
   });
 
+  it('does not close an allowlisted duplicate when mode is allowlist', async () => {
+    await importPromise;
+    await chrome.storage.sync.set({
+      settings: { enabled: true, mode: 'allowlist', ttl: 60000, gracePeriod: 30, idleDetection: false },
+      allowlist: ['app.clickup.com'],
+    });
+    setTabs([
+      { id: 1, windowId: 1, index: 0, title: 'CU 1', url: 'https://app.clickup.com/t/abc', pinned: false, active: false },
+      { id: 2, windowId: 1, index: 1, title: 'CU 2', url: 'https://app.clickup.com/t/abc', pinned: false, active: false },
+    ]);
+
+    // Trigger dedup via the onCreated handler for tab 2 (newer tab)
+    await onCreatedHandler({ id: 2, windowId: 1, url: 'https://app.clickup.com/t/abc', pinned: false });
+
+    expect(getRemovedTabIds()).not.toContain(1);
+    expect(getRemovedTabIds()).not.toContain(2);
+  });
+
   describe('periodic sweep via FORCE_CHECK', () => {
     it('closes older duplicate during periodic check', async () => {
       vi.useFakeTimers();
