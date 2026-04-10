@@ -27,9 +27,10 @@ export function matchesPattern(url, pattern) {
     const patternHost = slashIdx === -1 ? pattern : pattern.slice(0, slashIdx);
     const patternPath = slashIdx === -1 ? null : pattern.slice(slashIdx);
 
+    const target = patternHost.includes(':') ? u.host : u.hostname;
     const hostMatches =
-      u.hostname === patternHost ||
-      u.hostname.endsWith('.' + patternHost);
+      target === patternHost ||
+      target.endsWith('.' + patternHost);
 
     if (!hostMatches) return false;
     if (patternPath === null) return true;
