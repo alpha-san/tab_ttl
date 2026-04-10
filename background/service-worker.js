@@ -19,7 +19,7 @@ import {
   getAnalyticsState, saveAnalyticsState,
   getManuallyProtected, saveManuallyProtected,
 } from '../utils/storage.js';
-import { matchesAny } from '../utils/domain-matcher.js';
+import { matchesAny, matchesPattern } from '../utils/domain-matcher.js';
 
 /** True when a tab is actively producing unmuted audio. */
 function isTabAudible(tab) {
@@ -264,14 +264,14 @@ async function checkTabTTLs() {
 
 /**
  * Return the per-domain TTL for a URL if one exists, otherwise the global TTL.
+ * Delegates matching to `matchesPattern` so that port-bearing keys
+ * (e.g. `localhost:3000`) and path patterns work the same way they do for
+ * the allow/blocklist.
  */
 function resolveTabTTL(url, perDomainTTL, globalTTL) {
-  try {
-    const hostname = new URL(url).hostname;
-    for (const [pattern, ttl] of Object.entries(perDomainTTL)) {
-      if (hostname === pattern || hostname.endsWith('.' + pattern)) return ttl;
-    }
-  } catch { /* ignore */ }
+  for (const [pattern, ttl] of Object.entries(perDomainTTL)) {
+    if (matchesPattern(url, pattern)) return ttl;
+  }
   return globalTTL;
 }
 
@@ -395,7 +395,7 @@ async function closeTabAfterGrace(tabId) {
 
   try {
     const tab = await chrome.tabs.get(tabId);
-    if (tab.active || tab.pinned) return; // Last-second protection
+    if (tab.active || tab.pinned) return; // Last-second protection (allowlist already enforced by checkTabTTLs)
     if (isTabAudible(tab)) return; // Tab started playing — don't close
     const manuallyProtected = await getManuallyProtected();
     if (manuallyProtected.has(tabId)) return; // Grace state already cleared above; TTL re-evaluated on next alarm tick

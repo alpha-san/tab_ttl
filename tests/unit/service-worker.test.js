@@ -321,6 +321,35 @@ describe('checkTabTTLs skip conditions (via FORCE_CHECK)', () => {
     vi.useRealTimers();
   });
 
+  it('per-domain TTL with port-bearing key (localhost:3000) is honored', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000000);
+    await chrome.storage.sync.set({
+      settings: { enabled: true, ttl: 1000, mode: 'blocklist', idleDetection: false, gracePeriod: 10 },
+      blocklist: ['localhost'],
+      perDomainTTL: { 'localhost:3000': 60 * 60 * 1000 }, // 1 hour for :3000
+    });
+    setTabs([
+      { id: 1, url: 'http://localhost:3000/foo', pinned: false, active: false, title: 'Dev 3000' },
+      { id: 2, url: 'http://localhost:8080/foo', pinned: false, active: false, title: 'Dev 8080' },
+    ]);
+    await chrome.storage.local.set({ tabLastAccessed: { 1: 0, 2: 0 } });
+
+    await sendMessage({ type: 'FORCE_CHECK' });
+
+    // Tab 1 (localhost:3000) is covered by the per-domain entry — should NOT be in grace.
+    // Tab 2 (localhost:8080) falls through to global 1s TTL — should be in grace.
+    expect(chrome.alarms.create).toHaveBeenCalledWith(
+      'tabTTL-grace-2',
+      expect.objectContaining({ when: expect.any(Number) }),
+    );
+    expect(chrome.alarms.create).not.toHaveBeenCalledWith(
+      'tabTTL-grace-1',
+      expect.anything(),
+    );
+    vi.useRealTimers();
+  });
+
   it('allowlist mode skips tabs matching the allowlist', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1000000);
